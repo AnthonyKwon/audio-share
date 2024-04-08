@@ -76,7 +76,7 @@ class Audio(commands.Cog):
         if not vc:
             return await ctx.respond("Please use `/join` first!", ephemeral=True)
         
-        vc.play(PyAudioPCM(input_device='Virtual Speaker'))
+        vc.play(PyAudioPCM(input_device='Virtual Loopback'))
         await ctx.respond("Playing system audio to voice channel.", ephemeral=True)
 
     @commands.slash_command(name="leave", description="Leave the voice channel.")
