@@ -8,6 +8,17 @@ from discord.ext import commands
 import pyaudio
 import numpy as np
 
+async def join_voice(self, ctx):
+    vc = ctx.voice_client
+
+    if not vc:
+        vc = await ctx.author.voice.channel.connect()
+
+        if ctx.author.voice.channel.id != vc.channel.id:
+            return None
+
+    return vc
+
 def get_device_by_name(p, name):
     # check and return when matching device found
     for i in range(p.get_device_count()):
@@ -38,6 +49,7 @@ class PyAudioPCM(discord.AudioSource):
         self.input_stream = p.open(format=pyaudio.paInt16, channels=channels, rate=rate, input=True, input_device_index=index, frames_per_buffer=chunk)
 
     def read(self) -> bytes:
+        # read audio stream data from device
         data = self.input_stream.read(self.chunks)
 
         if self.channels > 2:
@@ -57,37 +69,75 @@ class Audio(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
     
+    # join to the voice channel
     @commands.slash_command(name="join", description="Join the voice channel.", ephemeral=True)
     async def join(self, ctx):
-        vc = ctx.voice_client
+        # join to the voice channel
+        vc = await join_voice(self, ctx)
 
-        if not vc:
-            vc = await ctx.author.voice.channel.connect()
+        # if failed to join voice channel (user not joined to vc)
+        if vc == None:
+            return await ctx.respond("You must be in the same voice channel as the bot.", ephemeral=True)
 
-            if ctx.author.voice.channel.id != vc.channel.id:
-                return await ctx.respond("You must be in the same voice channel as the bot.", ephemeral=True)
-
+        # show message
         await ctx.respond("Connected to voice channel.", ephemeral=True)
 
-    @commands.slash_command(name="play", description="Mirror the system sound.")
-    async def play(self, ctx):
-        vc = ctx.voice_client
-
-        if not vc:
-            return await ctx.respond("Please use `/join` first!", ephemeral=True)
-        
-        vc.play(PyAudioPCM(input_device='Virtual Loopback'))
-        await ctx.respond("Playing system audio to voice channel.", ephemeral=True)
-
+    # leave the voice channel
     @commands.slash_command(name="leave", description="Leave the voice channel.")
     async def leave(self, ctx):
         vc = ctx.voice_client
         
+        # if bot is not in the voice channel
         if not vc:
             return await ctx.respond("I'm not in the voice channel.", ephemeral=True)
         
+        # leave voice channel
         await vc.disconnect()
         await ctx.respond("Disconnected from voice channel!", ephemeral=True)
+
+    # play the system audio to the voice channel
+    @commands.slash_command(name="play", description="Play the system audio.")
+    async def play(self, ctx):
+        vc = ctx.voice_client
+
+        # if bot is not in the voice channel
+        if not vc:
+            vc = await join_voice(self, ctx)
+            # when failed to join voice channel
+            if vc == None:
+                return await ctx.respond("You must be in the same voice channel as the bot.", ephemeral=True)
+
+        # if bot is already playng audio
+        if vc.is_playing():
+            return await ctx.respond("I'm playing audio!", ephemeral=True)
+        
+        try:
+            # try to play audio
+            vc.play(PyAudioPCM(input_device='Virtual Loopback'))
+            await ctx.respond("Playing system audio to voice channel.", ephemeral=True)
+        except Exception as err:
+            await ctx.respond("Failed to play system audio!", ephemeral=True)
+            print(err)
+
+    # stop playing the system audio to the voice channel
+    @commands.slash_command(name="stop", description="Stop playing the audio.")
+    async def stop(self, ctx):
+        vc = ctx.voice_client
+
+        # if bot is not in the voice channel
+        if not vc:
+            vc = await join_voice(self, ctx)
+            # when failed to join voice channel
+            if vc == None:
+                return await ctx.respond("You must be in the same voice channel as the bot.", ephemeral=True)
+
+        # if bot is already playing audio
+        if not vc.is_playing():
+            return await ctx.respond("I'm not playing audio!", ephemeral=True)
+        
+        # stop playing audio
+        vc.stop()
+        await ctx.respond("Stopped playing audio.", ephemeral=True)
 
 def setup(bot):
     bot.add_cog(Audio(bot))
